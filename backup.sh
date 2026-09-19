@@ -31,6 +31,9 @@ Options:
   -n, --dry-run       Copy nothing, only write the extensions CSV.
   -h, --help          Show this help.
 
+Regardless of the filter file, dotfiles named after a number (.1, .23, ...) are
+always skipped, except the .42 directly in <source>.
+
 Each run writes one line of the file extensions it copied to
 $LOG_DIR/<date>_<time>.csv.
 Use it to tune the filter file.
@@ -173,6 +176,23 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
+# Skip dotfiles named after a number (.1, .23, ...), whatever the length. rsync
+# has no "one or more digits" pattern, so generate one rule per length. rsync
+# drops rules longer than ~1000 characters (5 per digit), so exact rules stop at
+# 199 digits and one last rule skips any dotfile starting with 200+ digits.
+# These come after the filter file's rules. The one exception: /.42, directly
+# in <source>.
+NUMBERED_FILTER="$TMP_DIR/numbered.filter"
+{
+  echo "+ /.42"
+  pattern="."
+  for _ in $(seq 1 199); do
+    pattern="$pattern[0-9]"
+    echo "- $pattern"
+  done
+  echo "- $pattern[0-9]*"
+} > "$NUMBERED_FILTER"
+
 echo "Source:      ${SOURCE%/}/"
 echo "Destination: $TARGET/"
 [ "$DRY_RUN" -eq 1 ] && echo "Dry run: nothing will be copied."
@@ -190,6 +210,7 @@ echo "Scanning files first (no progress shown yet, can take a few minutes), then
   --log-file="$RSYNC_LOG" \
   --log-file-format='@@ %i %n' \
   --filter=". $FILTER_FILE" \
+  --filter=". $NUMBERED_FILTER" \
   ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   "${SOURCE%/}/" "$TARGET/" 2> "$RSYNC_ERR"
 STATUS=$?
