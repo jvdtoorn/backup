@@ -1,0 +1,119 @@
+# rsync filter rules for backup.sh. Paths are relative to your home folder.
+#
+# Everything under ~ is backed up unless a rule below excludes it.
+# First matching rule wins. A leading "/" anchors the rule to the top of ~,
+# a trailing "/" only matches directories.
+#
+# Tweak this file using the extensions CSV in logs/: anything in there that you
+# don't want, exclude here (e.g. "- *.log"), then run the script again.
+# Files that were already copied stay in the backup, since nothing is deleted.
+
+# ---------------------------------------------------------------------------
+# macOS junk
+# ---------------------------------------------------------------------------
+- .DS_Store
+- ._*
+- .localized
+- .Spotlight-V100/
+- .fseventsd/
+- .Trashes/
+- /.Trash/
+- /.CFUserTextEncoding
+- /.cups/
+
+# ---------------------------------------------------------------------------
+# Regenerable build output and dependency folders, anywhere in the tree
+# ---------------------------------------------------------------------------
+- node_modules/
+- __pycache__/
+- *.pyc
+- .venv/
+- venv/
+- .tox/
+- .pytest_cache/
+- .mypy_cache/
+- .ruff_cache/
+- .next/
+- .nuxt/
+- .dart_tool/
+- .gradle/
+- Pods/
+# Uncomment if you never keep hand-made files in folders with these names:
+- build/
+- dist/
+- target/
+
+# ---------------------------------------------------------------------------
+# Top-level folders in ~
+# ---------------------------------------------------------------------------
+# App bundles and app data (reinstall / re-sync instead)
+- /Library/
+- /Applications/
+- /Applications (Parallels)/
+# Virtual machines: 44G, comment out to keep them
+- /Parallels/
+# Empty mount points for network drives
+- /Drives/
+
+# ---------------------------------------------------------------------------
+# Shell caches in ~ (.zsh_history and .bash_history are kept on purpose)
+# ---------------------------------------------------------------------------
+- /.zcompdump*
+- /.zsh_sessions/
+- /.bash_sessions/
+- /.lesshst
+- /.viminfo
+- /.node_repl_history
+- /.python_history
+- /.rm-safely-undo-stack
+- /.cache/
+
+# ---------------------------------------------------------------------------
+# Toolchains, package caches and installed extensions (easy to reinstall)
+# ---------------------------------------------------------------------------
+- /.npm/
+- /.yarn/
+- /.bun/
+- /.nvm/
+- /.oh-my-zsh/
+- /.pub-cache/
+- /.cocoapods/
+- /.gem/
+- /.rubies/
+- /.cabal/
+- /.stack/
+- /.ghcup/
+- /.julia/
+- /.juliaup/
+- /.conda/
+- /.m2/
+- /.nuget/
+- /.swiftpm/
+- /.keras/
+- /.minikube/
+- /.docker/
+- /.dart/
+- /.dartServer/
+- /.flutter/
+- /.flutter-devtools/
+- /.android/
+- /.expo/
+- /.vscode/
+- /.vscode-insiders/
+- /.cursor/
+- /.antigravity/
+- /.antigravity-ide/
+- /.matplotlib/
+- /.ipython/
+
+# ---------------------------------------------------------------------------
+# ~/.local: keep your own scripts in bin, skip the rest
+# ---------------------------------------------------------------------------
++ /.local/bin/***
+- /.local/*
+
+# ---------------------------------------------------------------------------
+# ~/.ssh: keep keys and config, skip what ssh recreates itself
+# ---------------------------------------------------------------------------
+- /.ssh/known_hosts*
+- /.ssh/agent/
