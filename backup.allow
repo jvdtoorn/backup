@@ -1,0 +1,400 @@
+# Allow list for backup.sh: the hidden files and folders (names starting with
+# ".") that ARE copied. Every other hidden file or folder is skipped.
+# Regular (non-hidden) files are governed by backup.ignore instead.
+#
+# One entry per line; "#" starts a comment line. Syntax:
+#   .gitignore      a file or folder with this name, at any depth
+#   /.zsh_history   only directly in the source folder (leading "/")
+#   .git/           a folder; everything inside it is kept (trailing "/")
+#   .env*           wildcards work
+#   /.local/bin/    a folder deeper down: only that subtree is kept
+#                   (needs the leading "/")
+#
+# The last form turns its parent into a KEEP-ONLY area: the parent folder is
+# walked, the listed subtree is kept, and everything else in that parent is
+# skipped. That is how ~/Library and the mixed tool folders (~/.gradle, ~/.m2)
+# are handled: list what is worth keeping, the rest falls away by itself.
+# Careful: a name that is allowed at ANY depth (.cargo/, .cursor/) cannot be
+# trimmed this way, because the any-depth rule also matches the copy in ~.
+# Those are trimmed from backup.ignore instead, which wins over this file.
+#
+# Rule order inside backup.sh: ignore list, then these allows, then the
+# keep-only catch-alls, then "skip every other hidden name". Changing that
+# order silently breaks the backup.
+#
+# Heads-up: this list deliberately keeps files that can hold secrets (.netrc,
+# .pypirc, .env*, .aws, .gnupg, .kube, .ssh, Keychains, .zsh_history). Keep the
+# backup disk safe.
+
+# ---------------------------------------------------------------------------
+# Shell config. Allowed at any depth on purpose: if ~/.zshrc and ~/.gitconfig
+# are symlinks into a dotfiles repository, the real files live in a subfolder.
+# ---------------------------------------------------------------------------
+.zshrc*
+.zshenv*
+.zprofile*
+.zlogin
+.zlogout
+.bashrc*
+.bash_profile*
+.bash_login
+.bash_logout
+.profile
+.kshrc
+.inputrc
+.aliases
+.functions
+.p10k.zsh
+/.zsh_history
+/.bash_history
+/.sshrc
+/.hushlogin
+/.tmux.conf
+/.screenrc
+/.nanorc
+/.wezterm.lua
+/.alacritty.yml
+/.alacritty.yaml
+/.alacritty.toml
+
+# ---------------------------------------------------------------------------
+# Git files (the .git/ folder itself is under "Folders" below)
+# ".git" without a slash is on purpose: a linked worktree or a submodule
+# stores a .git FILE, not a folder.
+# ---------------------------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.gitmodules
+.gitconfig
+.gitmessage
+.gitkeep
+.mailmap
+.git-blame-ignore-revs
+/.gitconfig-*
+/.git-credentials
+/.gitignore_global
+
+# ---------------------------------------------------------------------------
+# Environment and secrets. Recoverability wins here; see the warning above.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+.envrc
+.sops.yaml
+.sops.yml
+/.direnvrc
+
+# ---------------------------------------------------------------------------
+# Editors, search tools and general project config
+# ---------------------------------------------------------------------------
+.editorconfig
+.ignore
+.rgignore
+.fdignore
+.agignore
+.ackrc
+.ctags
+.watchmanconfig
+.htaccess
+.lfsconfig
+.lintignore
+.dockerignore
+.npmignore
+.gcloudignore
+.vercelignore
+.helmignore
+.firebaserc
+.cursorrules
+.cursorignore
+.windsurfrules
+.mcp.json
+.bazelrc
+.bazelignore
+.bazelversion
+.buckconfig
+.sentryclirc
+.mackup.cfg
+.stow-global-ignore
+.aider.conf.yml
+.aider.conf.yaml
+.aiderignore
+/.vimrc
+/.gvimrc
+/.ideavimrc
+/.emacs
+/.spacemacs
+
+# ---------------------------------------------------------------------------
+# JavaScript / TypeScript
+# ---------------------------------------------------------------------------
+.npmrc
+.nvmrc
+.node-version
+.yarnrc
+.yarnrc.yml
+.pnpmrc
+.pnpmfile.cjs
+.babelrc*
+.browserslistrc
+.swcrc
+.prettierrc*
+.prettierignore
+.eslintrc*
+.eslintignore
+.stylelintrc*
+.stylelintignore
+.lintstagedrc*
+.commitlintrc*
+.releaserc*
+.czrc
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.python-version
+.flake8
+.pylintrc
+.coveragerc
+.isort.cfg
+.mypy.ini
+.pydocstyle
+.condarc
+.mambarc
+/.pythonrc.py
+/.pypirc
+
+# ---------------------------------------------------------------------------
+# Ruby
+# ---------------------------------------------------------------------------
+.ruby-version
+.ruby-gemset
+.rspec
+.rubocop.yml
+.rubocop.yaml
+/.gemrc
+/.irbrc
+
+# ---------------------------------------------------------------------------
+# JVM and Scala
+# ---------------------------------------------------------------------------
+.java-version
+.sdkmanrc
+.jvmopts
+.sbtopts
+.scalafmt.conf
+.scalafix.conf
+
+# ---------------------------------------------------------------------------
+# Go, Rust, Swift, C and C++
+# ---------------------------------------------------------------------------
+.golangci.yml
+.golangci.yaml
+.golangci.toml
+.rustfmt.toml
+.swiftformat
+.swiftlint.yml
+.swiftlint.yaml
+.clang-format
+.clang-tidy
+.clangd
+
+# ---------------------------------------------------------------------------
+# Runtime and version managers
+# ---------------------------------------------------------------------------
+.tool-versions
+.mise.toml
+.rtx.toml
+
+# ---------------------------------------------------------------------------
+# Containers, infrastructure and DevOps
+# ---------------------------------------------------------------------------
+.terraform.lock.hcl
+.tflint.hcl
+.kube-linter.yml
+.kube-linter.yaml
+.ansible-lint
+.ansible-lint.yml
+.ansible-lint.yaml
+.trivyignore
+.checkov.yml
+.checkov.yaml
+/.terraformrc
+
+# ---------------------------------------------------------------------------
+# CI and automation
+# ---------------------------------------------------------------------------
+.gitlab-ci.yml
+.gitlab-ci.yaml
+.travis.yml
+.travis.yaml
+.drone.yml
+.drone.yaml
+.cirrus.yml
+.cirrus.yaml
+.appveyor.yml
+.appveyor.yaml
+.codecov.yml
+.pre-commit-config.yaml
+.pre-commit-config.yml
+.pre-commit-hooks.yaml
+.pre-commit-hooks.yml
+
+# ---------------------------------------------------------------------------
+# Formatting, linting and data
+# ---------------------------------------------------------------------------
+.markdownlint.json
+.markdownlint.yml
+.markdownlint.yaml
+.markdownlintignore
+.yamllint
+.yamllint.yml
+.yamllint.yaml
+.shellcheckrc
+.hadolint.yaml
+.hadolint.yml
+.sqlfluff
+.sqlfluffignore
+.Rprofile
+.Renviron
+.Rbuildignore
+
+# ---------------------------------------------------------------------------
+# Network, CLI and database config directly in ~
+# ---------------------------------------------------------------------------
+/.curlrc
+/.wgetrc
+/.netrc
+/.authinfo
+/.authinfo.gpg
+/.pgpass
+/.psqlrc
+/.my.cnf
+/.mongorc.js
+/.mongoshrc.js
+/.sqliterc
+/.boto
+/.databrickscfg
+/.vault-token
+/.hgrc
+/.mailcap
+/.42
+
+# ---------------------------------------------------------------------------
+# Folders, at any depth (in projects and in ~).
+# Trim the bulky copy in ~ from backup.ignore, not from here.
+# ---------------------------------------------------------------------------
+.git/
+.hg/
+.svn/
+.jj/
+.github/
+.gitlab/
+.circleci/
+.buildkite/
+.teamcity/
+.semaphore/
+.woodpecker/
+.husky/
+.changeset/
+.storybook/
+.devcontainer/
+.vscode/
+.idea/
+.run/
+.fleet/
+.zed/
+.nova/
+.cursor/
+.codex/
+.claude/
+.yarn/
+.cargo/
+.bundle/
+.dvc/
+.vercel/
+.netlify/
+.well-known/
+
+# ---------------------------------------------------------------------------
+# Folders directly in ~, kept whole
+# ---------------------------------------------------------------------------
+/.ssh/
+/.gnupg/
+/.aws/
+/.azure/
+/.oci/
+/.kube/
+/.docker/
+/.config/
+/.terraform.d/
+/.pulumi/
+/.password-store/
+/.jupyter/
+/.ipython/
+/.hammerspoon/
+/.terminfo/
+/.subversion/
+/.vim/
+/.emacs.d/
+/.doom.d/
+/.zsh/
+/.bash/
+/.bin/
+/.scripts/
+
+# ---------------------------------------------------------------------------
+# Folders in ~ that mix config with caches or downloaded runtimes: only the
+# listed paths are kept, the rest of the folder is skipped automatically.
+# ---------------------------------------------------------------------------
+/.local/bin/
+/.local/share/
+/.local/state/
+/.oh-my-zsh/custom/
+/.gradle/gradle.properties
+/.gradle/init.gradle
+/.gradle/init.gradle.kts
+/.gradle/init.d/
+/.m2/settings.xml
+/.m2/settings-security.xml
+/.m2/toolchains.xml
+/.nvm/alias/
+/.nvm/default-packages
+/.julia/config/
+/.julia/environments/
+/.pyenv/version
+/.rbenv/version
+/.rustup/settings.toml
+/.sdkman/etc/
+/.jenv/version
+/.huggingface/token
+/.kaggle/kaggle.json
+/.dbt/profiles.yml
+
+# ---------------------------------------------------------------------------
+# ~/Library: a keep-only area. Everything not listed here is skipped, which is
+# the point: most of the folder is caches, app containers and developer data
+# that can be regenerated. This list is a starting point, edit it to match the
+# apps you use. It covers app preferences, keychains, fonts, messages, browser
+# and mail data, notes, editor and IDE user settings, and the config files of a
+# few apps.
+#
+# DO NOT put "/Library/" in backup.ignore: an ignore rule wins and stops rsync
+# from ever looking inside. Removing every line below has the opposite effect
+# and copies the whole folder, because the catch-all disappears with them.
+# ---------------------------------------------------------------------------
+/Library/Preferences/
+/Library/Keychains/
+/Library/Fonts/
+/Library/Messages/
+/Library/Safari/
+/Library/Mail/
+/Library/Group Containers/group.com.apple.notes/
+/Library/Application Support/Code/User/
+/Library/Application Support/Code - Insiders/User/
+/Library/Application Support/Cursor/User/
+/Library/Application Support/Antigravity/User/
+/Library/Application Support/JetBrains/
+/Library/Application Support/Signal/
+/Library/Application Support/Sublime Text/
+/Library/Application Support/Claude/*.json

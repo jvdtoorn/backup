@@ -1,0 +1,206 @@
+# Blacklist for backup.sh: things that are NOT copied.
+#
+# One rsync exclude pattern per line; "#" starts a comment line. Trailing
+# comments are NOT supported: the whole line is the pattern.
+# A leading "/" anchors the pattern to the top of the source folder, a trailing
+# "/" only matches folders, "*" is a wildcard. Without a "/" the pattern matches
+# that name at any depth.
+#
+# This list wins over backup.allow and is applied first, which has two
+# consequences worth remembering:
+#   - a folder excluded here is never entered, so nothing inside it can be
+#     allowed back in. That is why "/Library/" is NOT in this file: ~/Library
+#     is a keep-only area defined in backup.allow.
+#   - it is the only way to trim the copy in ~ of a folder that backup.allow
+#     allows at any depth (.vscode/, .cursor/, .codex/, .cargo/).
+#
+# Hidden files and folders (names starting with ".") are skipped anyway unless
+# backup.allow lists them, so they only need an entry here to override an allow
+# entry. The hidden entries below are kept as documentation of intent.
+#
+# Tweak this file using extensions.csv in the run's folder under logs/: anything
+# in there that you don't want, add it here (e.g. "*.log"), then run the script
+# again.
+# Files that were already copied stay in the backup, since nothing is deleted.
+
+# ---------------------------------------------------------------------------
+# Extensions that are not worth recovering
+#
+# Only add extensions that are known to be machine-generated: leaving out a file
+# someone made is worse than carrying a little extra data. Deliberately NOT
+# listed, because they can hold authored or costly-to-redo data:
+#   *.bundle     a git bundle is a portable repository, made on purpose
+#   *.pkl        pickled data and models
+#   *.opf        ebook metadata
+#   *.xcsettings Xcode project settings
+# Check an extension against extensions.csv before adding it.
+# ---------------------------------------------------------------------------
+*.agent
+*.log
+*.tsbuildinfo
+*.hbc
+
+# ---------------------------------------------------------------------------
+# Transient lock and runtime files.
+# NOT "*.lock": that would throw away yarn.lock, Cargo.lock, Gemfile.lock,
+# poetry.lock and friends, which are worth keeping to rebuild a project.
+# There is no "*.db" either: SQLite files hold real user data (Messages,
+# Notes, browser profiles). Exclude a disposable database by its path instead.
+# ---------------------------------------------------------------------------
+*.pid
+*.pid.lock
+.~lock.*#
+/.gnupg/*.lock
+/.gnupg/S.gpg-agent*
+/.ssh/*.sock
+
+# ---------------------------------------------------------------------------
+# Generated files and editor leftovers
+# ("*.bak" and "*.backup" are deliberately absent: they are often hand-made.)
+# ---------------------------------------------------------------------------
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+~$*
+*.orig
+*.rej
+*.pyc
+*.pyo
+*.class
+*.o
+*.obj
+
+# ---------------------------------------------------------------------------
+# Regenerable build output and dependency folders, anywhere in the tree.
+# "build", "dist" and "target" are a deliberate tradeoff: they are nearly
+# always generated, but a hand-written folder with that name would be lost.
+# ---------------------------------------------------------------------------
+node_modules/
+__pycache__/
+venv/
+Pods/
+build/
+dist/
+target/
+coverage/
+DerivedData/
+
+# ---------------------------------------------------------------------------
+# Hidden caches and generated folders. The allow list would skip these anyway;
+# they are listed so the intent is on paper and stays that way if a future
+# allow entry would otherwise let them in.
+# ---------------------------------------------------------------------------
+.cache/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.next/
+.nuxt/
+.turbo/
+.parcel-cache/
+
+# ---------------------------------------------------------------------------
+# macOS junk
+# ---------------------------------------------------------------------------
+.DS_Store
+._*
+.localized
+/.CFUserTextEncoding
+
+# ---------------------------------------------------------------------------
+# Top-level folders in ~
+# ~/Library is NOT here on purpose; see the header and backup.allow.
+# ---------------------------------------------------------------------------
+# App bundles and app data (reinstall / re-sync instead)
+/Applications/
+/Applications (Parallels)/
+# Virtual machines (very large), remove this line to keep them
+/Parallels/
+# Empty mount points for network drives
+/Drives/
+
+# ---------------------------------------------------------------------------
+# Hidden folders that backup.allow allows at any depth (for projects), trimmed
+# down to the parts worth keeping for the copy directly in ~.
+# ---------------------------------------------------------------------------
+# installed extensions
+/.vscode/
+/.cursor/extensions/
+# downloaded plugins and scratch data
+/.codex/plugins/
+/.codex/computer-use/
+/.codex/dictation-history/
+# downloaded crates and build cache
+/.cargo/registry/
+/.cargo/git/
+/.cargo/bin/
+# Yarn's global package cache
+/.yarn/berry/cache/
+/.yarn/cache/
+
+# ---------------------------------------------------------------------------
+# Trimmings inside folders that backup.allow keeps whole
+# ---------------------------------------------------------------------------
+/.docker/desktop-build/
+/.docker/run/
+# credential and API caches, plugin downloads: recreated by `aws sso login`,
+# kubectl, terraform init and pulumi
+/.aws/cli/cache/
+/.aws/sso/cache/
+/.kube/cache/
+/.kube/http-cache/
+/.terraform.d/plugin-cache/
+/.pulumi/plugins/
+/.local/share/Trash/
+/.config/*/Cache/
+/.config/*/CachedData/
+
+# ---------------------------------------------------------------------------
+# ~/.ssh: keep keys and config, skip what ssh recreates itself
+# ---------------------------------------------------------------------------
+/.ssh/known_hosts*
+/.ssh/agent/
+
+# ---------------------------------------------------------------------------
+# ~/Library trimmings: the keep-only areas in backup.allow still contain
+# caches and per-workspace state that is rebuilt on first launch.
+# ---------------------------------------------------------------------------
+/Library/Application Support/Code/User/History/
+/Library/Application Support/Code/User/workspaceStorage/
+/Library/Application Support/Code/User/globalStorage/
+/Library/Application Support/Code - Insiders/User/History/
+/Library/Application Support/Code - Insiders/User/workspaceStorage/
+/Library/Application Support/Code - Insiders/User/globalStorage/
+/Library/Application Support/Cursor/User/History/
+/Library/Application Support/Cursor/User/workspaceStorage/
+/Library/Application Support/Cursor/User/globalStorage/
+/Library/Application Support/Antigravity/User/History/
+/Library/Application Support/Antigravity/User/workspaceStorage/
+/Library/Application Support/Antigravity/User/globalStorage/
+/Library/Application Support/Google/Chrome/Crashpad/
+/Library/Application Support/Google/Chrome/BrowserMetrics/
+/Library/Application Support/Google/Chrome/component_crx_cache/
+/Library/Application Support/Google/Chrome/extensions_crx_cache/
+/Library/Application Support/Google/Chrome/*/Cache/
+/Library/Application Support/Google/Chrome/*/Code Cache/
+/Library/Application Support/Google/Chrome/*/GPUCache/
+/Library/Application Support/Google/Chrome/*/DawnGraphiteCache/
+/Library/Application Support/Google/Chrome/*/DawnWebGPUCache/
+/Library/Application Support/Google/Chrome/*/Service Worker/
+/Library/Application Support/JetBrains/*/caches/
+/Library/Application Support/JetBrains/*/log/
+/Library/Application Support/JetBrains/*/index/
+
+# ---------------------------------------------------------------------------
+# Worth reviewing for your own setup
+#   - build/, dist/ and target/ are excluded at any depth. That is nearly always
+#     right, but a hand-written folder with one of those names would be skipped.
+#   - ~/Library/Containers and Group Containers hold app data for sandboxed
+#     apps. Only what backup.allow names is kept.
+#   - .idea/ is kept whole; trim it if it turns out to be mostly machine state.
+# ---------------------------------------------------------------------------
