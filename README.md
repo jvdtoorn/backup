@@ -117,7 +117,7 @@ tests/run.sh --slow
 
 ## Contributing
 
-Contributions are welcome. If you find a bug, an edge case, or a way to make the script more robust or higher quality, feel free to open a merge request.
+This repository is open to contributions. If you find a bug, an edge case, or a way to improve the robustness or overall quality of the backup script, feel free to create a merge request. Improvements are welcome.
 
 ## License
 
