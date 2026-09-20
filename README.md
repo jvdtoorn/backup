@@ -40,6 +40,7 @@ Symlinks are copied as symlinks, mounted filesystems below the source are not tr
 | `-i`, `--ignore FILE` | Use a different ignore list. |
 | `-a`, `--allow FILE` | Use a different allow list. |
 | `--print-rules` | Print the generated rsync filter rules and exit. |
+| `--no-local` | Leave out the rules in `.local/`. |
 | `-h`, `--help` | Show command-line help. |
 
 ## Filters
@@ -65,12 +66,20 @@ node_modules/
 
 A nested anchored allow entry such as `/.local/bin/` creates a keep-only area: the parent is traversed only far enough to retain the listed subtree. `~/Library` uses this mechanism to keep selected data without copying the entire directory.
 
+## Local rules
+
+A `.local/` folder next to the script may contain its own `backup.ignore` and `backup.allow`. Their entries are added to the lists in the repository, so they apply to that machine only. The folder is listed in `.gitignore`.
+
+As with the repository lists, an ignore entry takes precedence over an allow entry, so a local ignore entry can exclude something the repository allows.
+
+Use `--no-local` to leave the local rules out. The rules shown by `--print-rules` include them.
+
 ## Logs
 
 Each run creates `logs/<date>_<time>/`.
 
 - `extensions.csv` lists file types transferred during the run.
-- `progress.log` records the first transferred file seen for each file type.
+- `progress.log` records a file whenever the transferred file type changes, so repeated transitions such as `*.txt → *.jpg → *.txt` are preserved.
 - `files.txt` is created during a dry run and lists what rsync would copy.
 - `errors.txt` is created when rsync reports copy errors.
 
@@ -117,7 +126,7 @@ tests/run.sh --slow
 
 ## Contributing
 
-This repository is open to contributions. If you find a bug, an edge case, or a way to improve the robustness or overall quality of the backup script, feel free to create a merge request. Improvements are welcome.
+This repository is open to contributions. If you find a bug, an edge case, or a way to improve the robustness or overall quality of the backup script, feel free to open a pull request. Improvements are welcome.
 
 ## License
 

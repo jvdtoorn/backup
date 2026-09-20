@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_IGNORE="$SCRIPT_DIR/backup.ignore"
 DEFAULT_ALLOW="$SCRIPT_DIR/backup.allow"
 LOG_DIR="$SCRIPT_DIR/logs"
+LOCAL_DIR="$SCRIPT_DIR/.local"
 
 # Circuit breakers for the traversal. These are not filter rules: they exist so
 # a malformed, cyclic or unexpectedly huge tree makes the run stop with an
@@ -40,36 +41,46 @@ Arguments:
 Options:
   -i, --ignore FILE   Patterns to skip, one per line (rsync syntax, paths
                       relative to <source>). Default: backup.ignore next to
-                      this script. If that file is missing, --ignore is required.
+                      this script; required if that file is missing.
   -a, --allow FILE    Hidden files/folders to keep, one per line. Default:
-                      backup.allow next to this script. If that file is
-                      missing, --allow is required.
+                      backup.allow next to this script; required if that
+                      file is missing.
   -n, --dry-run       Copy nothing; write the run's logs and the list of files
                       that would have been copied. Shows no progress.
       --print-rules   Print the rsync filter rules built from the two lists and
                       exit, without walking or copying anything.
+      --no-local      Leave out the rules in the .local folder (see below).
   -h, --help          Show this help.
 
 The ignore list wins over the allow list. Both files explain their syntax.
 
-Before copying, the source tree is walked once to check the safety limits
-(depth $MAX_DEPTH, $MAX_ENTRIES_PER_DIRECTORY entries per folder,
-$MAX_TOTAL_ENTRIES in total, and $MAX_PREFLIGHT_SECONDS seconds for the check
-itself). Crossing one of them stops the run before anything is copied, naming
-the folder that did it. Raise a limit for one run with MAX_DEPTH=...,
-MAX_ENTRIES_PER_DIRECTORY=..., MAX_TOTAL_ENTRIES=... or MAX_PREFLIGHT_SECONDS=...
+A .local folder next to this script may hold its own backup.ignore and
+backup.allow. Their entries are added to the two lists above, for this machine
+only (the folder is git-ignored). --no-local leaves them out.
+
+Before copying, the source is walked once to check the limits below. Crossing
+one stops the run before anything is copied, naming the folder responsible.
+Set one in the environment to change it for a single run.
+
+HELP
+  printf '  %-25s %7s  %s\n' \
+    MAX_DEPTH "$MAX_DEPTH" "levels below <source>" \
+    MAX_ENTRIES_PER_DIRECTORY "$MAX_ENTRIES_PER_DIRECTORY" "entries in one folder" \
+    MAX_TOTAL_ENTRIES "$MAX_TOTAL_ENTRIES" "entries in the whole run" \
+    MAX_PREFLIGHT_SECONDS "$MAX_PREFLIGHT_SECONDS" "seconds for this check itself"
+  cat <<HELP
 
 Exit status: 0 when everything was copied (also when some files vanished while
 copying), 23 when rsync could not copy some files, which means the backup is
 incomplete (see errors.txt in the run's log folder), 2 for a usage error, and 1
 or rsync's own code for any other failure, including a crossed safety limit.
 
-Each run writes a folder $LOG_DIR/<date>_<time>/ with two files, refreshed
-every few seconds while copying:
+Each run writes a folder logs/<date>_<time>/ next to this script with two
+files, refreshed every few seconds while copying:
   extensions.csv   one line with the file extensions copied in this run.
                    Use it to tune the ignore list.
-  progress.log     "<unix time>: <full path>" for the first file of every new
-                   extension (or hidden file name) in this run.
+  progress.log     "<unix time>: <full path>" whenever the copied file kind
+                   changes (extension, hidden file name, or no extension).
 
 Examples:
   ./backup.sh ~ "/Volumes/Backup Disk/home"
@@ -125,6 +136,7 @@ done
 
 DRY_RUN=0
 PRINT_RULES=0
+USE_LOCAL=1
 IGNORE_FILE=""
 ALLOW_FILE=""
 POSITIONAL=()
@@ -133,6 +145,7 @@ while [ $# -gt 0 ]; do
     -h|--help) usage; exit 0 ;;
     -n|--dry-run) DRY_RUN=1 ;;
     --print-rules) PRINT_RULES=1 ;;
+    --no-local) USE_LOCAL=0 ;;
     -i|--ignore)
       [ $# -ge 2 ] || die "$1 needs a file"
       IGNORE_FILE="$2"; shift ;;
@@ -221,6 +234,27 @@ list_entries() {   # file content without comments, blank lines or edge spaces
   sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^#/d' -e '/^$/d' "$1"
 }
 
+# Local rules: a .local folder next to the script may hold its own backup.ignore
+# and backup.allow, for this machine only. Their entries are added to the
+# lists above, so ignore still wins over allow across both: a local ignore can
+# also exclude something the repository allows.
+LOCAL_IGNORE=""
+LOCAL_ALLOW=""
+if [ "$USE_LOCAL" -eq 1 ]; then
+  [ -f "$LOCAL_DIR/backup.ignore" ] && LOCAL_IGNORE="$LOCAL_DIR/backup.ignore"
+  [ -f "$LOCAL_DIR/backup.allow" ] && LOCAL_ALLOW="$LOCAL_DIR/backup.allow"
+fi
+merge_lists() {   # the given files one after another, each ending in a newline
+  local f
+  for f in "$@"; do
+    if [ -n "$f" ]; then cat "$f"; echo; fi
+  done
+}
+IGNORE_LIST="$TMP_DIR/ignore.list"
+ALLOW_LIST="$TMP_DIR/allow.list"
+merge_lists "$IGNORE_FILE" "$LOCAL_IGNORE" > "$IGNORE_LIST"
+merge_lists "$ALLOW_FILE" "$LOCAL_ALLOW" > "$ALLOW_LIST"
+
 RULES_FILE="$TMP_DIR/backup.rules"
 ALLOW_INCLUDES="$TMP_DIR/allow.includes"
 ALLOW_CATCHALLS="$TMP_DIR/allow.catchalls"
@@ -236,7 +270,7 @@ case "$TARGET" in
     echo "- $TARGET_REL/" >> "$RULES_FILE" ;;
 esac
 
-list_entries "$IGNORE_FILE" | sed 's/^/- /' >> "$RULES_FILE"
+list_entries "$IGNORE_LIST" | sed 's/^/- /' >> "$RULES_FILE"
 
 while IFS= read -r entry; do
   is_dir=0
@@ -265,7 +299,7 @@ while IFS= read -r entry; do
   else
     echo "+ $entry" >> "$ALLOW_INCLUDES"
   fi
-done < <(list_entries "$ALLOW_FILE")
+done < <(list_entries "$ALLOW_LIST")
 
 cat "$ALLOW_INCLUDES" "$ALLOW_CATCHALLS" >> "$RULES_FILE"
 echo "- .*" >> "$RULES_FILE"
@@ -347,7 +381,7 @@ while IFS= read -r pat; do
   esac
   [ "$dir_only" -eq 1 ] && pexpr+=( -type d )
   add_prune "${pexpr[@]}"
-done < <(list_entries "$IGNORE_FILE")
+done < <(list_entries "$IGNORE_LIST")
 
 # 2. hidden names the allow list doesn't mention (the "- .*" rule). Two things
 #    keep a hidden name from being pruned:
@@ -360,7 +394,7 @@ done < <(list_entries "$IGNORE_FILE")
 HIDDEN=( -name '.*' )
 while IFS= read -r name; do
   [ -n "$name" ] && HIDDEN+=( ! -name "$name" )
-done < <(list_entries "$ALLOW_FILE" | sed -e 's|^/||' -e 's|/.*$||' | grep '^\.' | sort -u)
+done < <(list_entries "$ALLOW_LIST" | sed -e 's|^/||' -e 's|/.*$||' | grep '^\.' | sort -u)
 while IFS= read -r entry; do
   case "$entry" in */) entry="${entry%/}" ;; *) continue ;; esac
   case "$entry" in
@@ -368,7 +402,7 @@ while IFS= read -r entry; do
     */*) ;;                                         # skipped with a warning above
     *)   HIDDEN+=( ! -path "*/$entry/*" ) ;;
   esac
-done < <(list_entries "$ALLOW_FILE")
+done < <(list_entries "$ALLOW_LIST")
 add_prune "${HIDDEN[@]}"
 
 # 3. keep-only areas: in a folder that only exists to hold an allowed subtree,
@@ -392,6 +426,9 @@ done < "$TMP_DIR/keeponly"
 
 echo "Source:      ${SOURCE%/}/"
 echo "Destination: $TARGET/"
+if [ -n "$LOCAL_IGNORE$LOCAL_ALLOW" ]; then
+  echo "Local rules: ${LOCAL_IGNORE:+ignore }${LOCAL_ALLOW:+allow }from $LOCAL_DIR (--no-local to skip)"
+fi
 [ "$DRY_RUN" -eq 1 ] && echo "Dry run: nothing will be copied."
 echo "Checking safety limits (depth $MAX_DEPTH, $MAX_ENTRIES_PER_DIRECTORY per folder, $MAX_TOTAL_ENTRIES in total, $MAX_PREFLIGHT_SECONDS s)..."
 
@@ -530,9 +567,9 @@ CSV_INTERVAL=10   # seconds between live updates of the logs while copying
 RSYNC_LOG="$TMP_DIR/rsync.log"
 RSYNC_ERR="$TMP_DIR/rsync.err"
 PROGRESS_OFFSET="$TMP_DIR/progress.offset"   # lines of RSYNC_LOG already handled
-PROGRESS_SEEN="$TMP_DIR/progress.seen"       # extensions already written
+PROGRESS_LAST="$TMP_DIR/progress.last"         # kind of the last transferred file handled
 echo 0 > "$PROGRESS_OFFSET"
-: > "$PROGRESS_SEEN"
+: > "$PROGRESS_LAST"
 : > "$PROGRESS"
 
 # The kind of file a path is, for both logs (awk function, prepended to their
@@ -568,12 +605,14 @@ write_csv() {
   ' "$RSYNC_LOG" | sort -u | paste -sd, - > "$CSV_TMP" && mv -f "$CSV_TMP" "$CSV"
 }
 
-# Add the first file of every kind that hasn't appeared yet in this run to
-# progress.log, as "<unix time>: <full path>". Unlike the CSV this only looks
-# at the lines rsync wrote since the last call, so it stays cheap on a log with
-# millions of lines. The time is the one rsync logged for that file, which
-# every line starts with as "YYYY/MM/DD HH:MM:SS" (a dry run asks for it with
-# %t). Only one process may call this at a time; see live_update and cleanup.
+# Add the first file whenever the transferred file kind changes to progress.log,
+# as "<unix time>: <full path>". A kind is an extension, a hidden file name, or
+# "(none)" for extensionless files. If the transfer goes *.txt -> *.jpg -> *.txt,
+# all three transitions are recorded. Unlike the CSV this only looks at the lines
+# rsync wrote since the last call, so it stays cheap on a log with millions of
+# lines. The time is the one rsync logged for that file, which every line starts
+# with as "YYYY/MM/DD HH:MM:SS" (a dry run asks for it with %t). Only one process
+# may call this at a time; see live_update and cleanup.
 update_progress() {
   [ -f "$RSYNC_LOG" ] || return 0
   local offset total
@@ -581,30 +620,29 @@ update_progress() {
   total="$(wc -l < "$RSYNC_LOG" | tr -d ' ')"     # complete lines only
   [ "$total" -gt "$offset" ] || return 0
   tail -n +"$((offset + 1))" "$RSYNC_LOG" | head -n "$((total - offset))" |
-  awk -v src="${SOURCE%/}" -v seenfile="$PROGRESS_SEEN" -v outfile="$PROGRESS" "$AWK_KIND"'
+  awk -v src="${SOURCE%/}" -v lastfile="$PROGRESS_LAST" -v outfile="$PROGRESS" "$AWK_KIND"'
     BEGIN {
-      while ((getline line < seenfile) > 0) seen[line] = 1
-      close(seenfile)
+      last = ""
+      if ((getline line < lastfile) > 0) last = line
+      close(lastfile)
     }
     match($0, /@@ >f[^ ]+ /) {
       path = substr($0, RSTART + RLENGTH)
       n = split(path, parts, "/")
       kind = kind_of(parts[n])
-      if (kind in seen) next
-      seen[kind] = 1
+      if (kind == last) next
+      last = kind
       cmd = "date -j -f \"%Y/%m/%d %H:%M:%S\" \"" substr($0, 1, 19) "\" +%s"
       stamp = ""
       cmd | getline stamp
       close(cmd)
       if (stamp !~ /^[0-9]+$/) { "date +%s" | getline stamp; close("date +%s") }
-      new_kinds[++count] = kind
-      entries[count] = stamp ": " src "/" path
+      entries[++count] = stamp ": " src "/" path
     }
     END {
-      for (i = 1; i <= count; i++) {
-        print new_kinds[i] >> seenfile
-        print entries[i] >> outfile
-      }
+      for (i = 1; i <= count; i++) print entries[i] >> outfile
+      print last > lastfile
+      close(lastfile)
     }
   ' && echo "$total" > "$PROGRESS_OFFSET"
 }
@@ -657,9 +695,9 @@ cleanup() {
     echo "Full list: $ERRORS"
   fi
   [ "$FINISHED" -eq 1 ] || echo "Interrupted. Run the same command again to continue."
-  echo "Extensions copied in this run: $CSV"
-  echo "First file of each extension:  $PROGRESS"
-  [ "$DRY_RUN" -eq 1 ] && [ -f "$FILES" ] && echo "Files that would be copied:    $FILES"
+  echo "Extensions:  $CSV"
+  echo "Progress:    $PROGRESS"
+  [ "$DRY_RUN" -eq 1 ] && [ -f "$FILES" ] && echo "Files:       $FILES"
   [ -z "$STATUS_NOTE" ] || echo "$STATUS_NOTE" >&2
   rm -rf "$TMP_DIR"
 }

@@ -29,14 +29,18 @@ bad()  { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 check() { if [ "$2" = "$3" ]; then ok; else bad "$1: expected '$3', got '$2'"; fi; }
 
 # Run backup.sh on a fake home. $1 = fake home, $2 = target, rest = options.
+# The tests check the lists that ship with the script, so they run with
+# --no-local, and a .local folder on the machine can't change what they expect.
+# The local-rules tests clear LOCAL_FLAG.
+LOCAL_FLAG="--no-local"
 run_backup() {
   local home="$1" target="$2"; shift 2
-  HOME="$home" "$BACKUP" ${1+"$@"} -i "$REPO/backup.ignore" -a "$REPO/backup.allow" \
+  HOME="$home" "$BACKUP" ${1+"$@"} $LOCAL_FLAG -i "$REPO/backup.ignore" -a "$REPO/backup.allow" \
     '~' "$target" > "$TMP/out.txt" 2> "$TMP/err.txt"
 }
 
 # Run backup.sh with explicit arguments (source and target as given).
-run_paths() { "$BACKUP" -i "$REPO/backup.ignore" -a "$REPO/backup.allow" "$@" > "$TMP/out.txt" 2> "$TMP/err.txt"; }
+run_paths() { "$BACKUP" --no-local -i "$REPO/backup.ignore" -a "$REPO/backup.allow" "$@" > "$TMP/out.txt" 2> "$TMP/err.txt"; }
 
 # ===========================================================================
 echo "== what is copied =="
@@ -308,26 +312,51 @@ check_progress() {   # <label> <run folder>
   [ -s "$prog" ] || { bad "$label: progress.log is empty or missing"; return; }
   # "<unix time>: <full path>", nothing else
   check "$label: line format" "$(grep -cvE '^[0-9]{10}: /' "$prog")" "0"
-  # one entry per kind in the CSV, no more
+  # every kind that was copied is logged, and a kind is logged again each time
+  # it comes back after another one, so there are at least as many entries as
+  # extensions in the CSV
   kinds="$(tr ',' '\n' < "$2/extensions.csv" | grep -c .)"
   lines="$(wc -l < "$prog" | tr -d ' ')"
-  check "$label: one entry per extension" "$lines" "$kinds"
+  if [ "$lines" -ge "$kinds" ]; then ok; else bad "$label: $lines entries for $kinds extensions"; fi
   # the full path of a real file, not a path relative to the source
   check "$label: full paths" "$(grep -c ": $HP/" "$prog")" "$lines"
   # the time is when it was copied, i.e. just now
   now="$(date +%s)"; first="$(head -1 "$prog" | cut -d: -f1)"
   if [ $((now - first)) -ge 0 ] && [ $((now - first)) -lt 120 ]; then ok
   else bad "$label: timestamp $first is not recent (now $now)"; fi
-  # a kind is only logged once, however many files have it
-  check "$label: *.txt once" "$(grep -c '\.txt$' "$prog")" "1"
-  check "$label: .gitignore once" "$(grep -c '/\.gitignore$' "$prog")" "1"
-  check "$label: .zshrc once (hidden file name)" "$(grep -c '/\.zshrc$' "$prog")" "1"
-  check "$label: extensionless file logged" "$(grep -c '/Makefile$' "$prog")" "1"
+  # an extension, a hidden file name and a file without extension are all there
+  # (which file of a kind gets logged depends on rsync's order, so only presence)
+  local pat
+  for pat in '\.txt$' '/\.gitignore$' '/\.zshrc$' '/Makefile$'; do
+    if grep -q "$pat" "$prog"; then ok; else bad "$label: nothing logged for $pat"; fi
+  done
   # files that were not copied never show up
   check "$label: skipped files absent" "$(grep -cE '/(app\.log|\.unknownrc|\.5)$' "$prog")" "0"
 }
 check_progress "real run" "$RUN1"
 check_progress "dry run" "$RUN2"
+
+# progress.log records every change of file kind: *.txt -> *.jpg -> *.txt is three
+# lines, and a run of the same kind is one. rsync copies the files of a folder
+# in name order.
+TR="$TMP/transitions"; mkdir -p "$TR"
+for f in a.txt b.jpg c.txt d.txt e.jpg f.md g.md; do : > "$TR/$f"; done
+run_paths "$TR" "$TMP/out-tr"
+check "transitions: exit status" "$?" "0"
+check "transitions: one line per change of kind" \
+  "$(sed 's|.*/||' "$(latest_run)/progress.log" | tr '\n' ' ')" "a.txt b.jpg c.txt e.jpg f.md "
+
+# The kind of the last file has to be remembered between the refreshes while
+# copying (every 10 s, 1 s here), or each refresh would log a file that only
+# continues a run of one kind.
+LV="$TMP/live"; mkdir -p "$LV/home" "$LV/wrap" "$LV/bin"
+for f in x1.aa x2.aa y1.bb y2.bb; do head -c 60000 /dev/urandom > "$LV/home/$f"; done
+sed 's/^CSV_INTERVAL=10/CSV_INTERVAL=1/' "$REPO/backup.sh" > "$LV/bin/backup.sh"; chmod +x "$LV/bin/backup.sh"
+printf '#!/bin/sh\nexec "%s" --bwlimit=60 "$@"\n' "$(command -v rsync)" > "$LV/wrap/rsync"; chmod +x "$LV/wrap/rsync"
+PATH="$LV/wrap:$PATH" HOME="$LV/home" "$LV/bin/backup.sh" --no-local -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$LV/out" > "$TMP/out.txt" 2> "$TMP/err.txt"
+check "live refresh: exit status" "$?" "0"
+check "a run of one kind spanning refreshes is logged once" \
+  "$(sed 's|.*/||' "$LV/bin/logs/"*/progress.log | tr '\n' ' ')" "x1.aa y1.bb "
 
 # a second run into the same target has nothing new to copy: both logs are empty
 sleep 1
@@ -452,7 +481,7 @@ if pgrep -f 'sleep 37' > /dev/null; then bad "the stuck scan is still running"; 
 cat > "$TMP/ctrlc.sh" <<EOF
 #!/bin/bash
 set -m
-PATH="$TMP/hang:\$PATH" HOME="$W" "$BACKUP" -n -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$TMP/out-ctrlc" > "$TMP/ctrlc.out" 2>&1 &
+PATH="$TMP/hang:\$PATH" HOME="$W" "$BACKUP" -n --no-local -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$TMP/out-ctrlc" > "$TMP/ctrlc.out" 2>&1 &
 pid=\$!
 sleep 2
 kill -INT -\$pid
@@ -479,6 +508,7 @@ run_backup "$L2" "$TMP/out-locked"
 check "unreadable folder: run goes on, rsync reports exit 23" "$?" "23"
 grep -q "could not be inspected during the check" "$TMP/out.txt" && ok || bad "no note about the unreadable folder"
 chmod 755 "$L2/closed"
+chmod -R u+rwx "$TMP/out-locked"      # rsync copied the folder with its mode 000; the cleanup at the end needs to enter it
 
 # ===========================================================================
 echo "== exit status =="
@@ -523,6 +553,47 @@ run_paths "$C" "$C/sub/.."
 check "same folder through .." "$?" "2"
 
 # ===========================================================================
+echo "== local rules =="
+# ===========================================================================
+# A .local folder next to the script adds to the two lists, for one machine.
+# The script is reached through a symlink in $TMP/bin, so that is where it
+# looks; every other test runs with --no-local and never sees it.
+LR="$TMP/localrules"; mkdir -p "$LR/keepme" "$LR/secret" "$LR/.claude" "$LR/.mytool"
+: > "$LR/notes.txt"; : > "$LR/keepme/a.txt"; : > "$LR/secret/b.txt"
+: > "$LR/.claude/c.json"; : > "$LR/.mytool/d.conf"
+has()   { if [ -e "$1/$2" ]; then ok; else bad "should be in $(basename "$1"): $2"; fi; }
+hasnt() { if [ -e "$1/$2" ]; then bad "should not be in $(basename "$1"): $2"; else ok; fi; }
+
+# no .local folder: nothing changes, nothing is announced
+LOCAL_FLAG="" run_backup "$LR" "$TMP/out-lr0"
+check "no .local folder: exit status" "$?" "0"
+grep -q "Local rules" "$TMP/out.txt" && bad "announced local rules that don't exist" || ok
+has "$TMP/out-lr0" secret/b.txt
+has "$TMP/out-lr0" .claude/c.json
+hasnt "$TMP/out-lr0" .mytool
+
+# with one: its ignore entries exclude (also what backup.allow keeps, ".claude/"),
+# its allow entries keep
+mkdir -p "$TMP/bin/.local"
+printf 'secret/\n/.claude/\n' > "$TMP/bin/.local/backup.ignore"
+printf '/.mytool/\n' > "$TMP/bin/.local/backup.allow"
+LOCAL_FLAG="" run_backup "$LR" "$TMP/out-lr1"
+check "local rules: exit status" "$?" "0"
+grep -q "Local rules: ignore allow" "$TMP/out.txt" && ok || bad "local rules not announced"
+has "$TMP/out-lr1" notes.txt
+has "$TMP/out-lr1" keepme/a.txt
+hasnt "$TMP/out-lr1" secret
+hasnt "$TMP/out-lr1" .claude
+has "$TMP/out-lr1" .mytool/d.conf
+
+# --no-local leaves them out again
+run_backup "$LR" "$TMP/out-lr2"
+has "$TMP/out-lr2" secret/b.txt
+has "$TMP/out-lr2" .claude/c.json
+hasnt "$TMP/out-lr2" .mytool
+/bin/rm -rf "$TMP/bin/.local"
+
+# ===========================================================================
 echo "== interrupted copy resumes without leaving a truncated file =="
 # ===========================================================================
 PD="$TMP/partial"; mkdir -p "$PD/home" "$TMP/wrap"
@@ -532,7 +603,7 @@ chmod +x "$TMP/wrap/rsync"
 cat > "$TMP/interrupt.sh" <<EOF
 #!/bin/bash
 set -m
-PATH="$TMP/wrap:\$PATH" HOME="$PD/home" "$BACKUP" -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$PD/out" > "$TMP/int.out" 2>&1 &
+PATH="$TMP/wrap:\$PATH" HOME="$PD/home" "$BACKUP" --no-local -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$PD/out" > "$TMP/int.out" 2>&1 &
 pid=\$!
 sleep 3
 kill -INT -\$pid
@@ -543,7 +614,7 @@ chmod +x "$TMP/interrupt.sh"; "$TMP/interrupt.sh"; sleep 1
 check "interrupted run exits 130" "$(cat "$TMP/int.status")" "130"
 [ -e "$PD/out/big.bin" ] && bad "a truncated file sits under its real name" || ok
 if [ -s "$PD/out/.rsync-partial/big.bin" ]; then ok; else bad "no partial file in .rsync-partial"; fi
-run_paths_home() { HOME="$PD/home" "$BACKUP" -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$PD/out" > "$TMP/out.txt" 2> "$TMP/err.txt"; }
+run_paths_home() { HOME="$PD/home" "$BACKUP" --no-local -i "$REPO/backup.ignore" -a "$REPO/backup.allow" '~' "$PD/out" > "$TMP/out.txt" 2> "$TMP/err.txt"; }
 run_paths_home
 check "rerun completes" "$?" "0"
 cmp -s "$PD/home/big.bin" "$PD/out/big.bin" && ok || bad "file differs from the source after the rerun"
